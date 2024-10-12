@@ -1,76 +1,100 @@
-def exibir_menu():
-    print("""
-    Bem-vindo!
-    
-    Escolha a operação desejada:
-    1 - Depósito
-    2 - Saque
-    3 - Extrato
-    4 - Sair
-    """)
+from abc import ABC, abstractmethod
+from datetime import date
 
-def realizar_deposito(saldo, extrato):
-    valor = float(input("Informe o valor do depósito: "))
-    if valor > 0:
-        saldo += valor
-        extrato.append(f"Depósito: R$ {valor:.2f}")
-        print(f"Depósito de R$ {valor:.2f} realizado com sucesso!")
-    else:
-        print("Valor inválido. O depósito não foi realizado.")
-    return saldo, extrato
+class Historico:
+    def __init__(self):
+        self.transacoes = []
 
-def realizar_saque(saldo, extrato, numero_saques, limite_saques, limite):
-    if numero_saques >= limite_saques:
-        print("Você já realizou o número máximo de saques diários.")
-        return saldo, extrato, numero_saques
+    def adicionar_transacao(self, transacao):
+        self.transacoes.append(transacao)
 
-    valor = float(input("Informe o valor do saque: "))
-    if valor > saldo:
-        print("Saldo insuficiente para realizar o saque.")
-    elif valor > limite:
-        print(f"O valor do saque excede o limite permitido de R$ {limite:.2f}.")
-    elif valor > 0:
-        saldo -= valor
-        extrato.append(f"Saque: R$ {valor:.2f}")
-        numero_saques += 1
-        print(f"Saque de R$ {valor:.2f} realizado com sucesso!")
-    else:
-        print("Valor inválido. O saque não foi realizado.")
-    
-    return saldo, extrato, numero_saques
+class Transacao(ABC):
+    @abstractmethod
+    def registrar(self, conta):
+        pass
 
-def exibir_extrato(saldo, extrato):
-    print("\n=== Extrato ===")
-    if not extrato:
-        print("Nenhuma movimentação realizada.")
-    else:
-        for item in extrato:
-            print(item)
-    print(f"\nSaldo atual: R$ {saldo:.2f}")
-    print("================\n")
+class Deposito(Transacao):
+    def __init__(self, valor):
+        self.valor = valor
 
-def main():
-    saldo = 0
-    limite = 500
-    extrato = []
-    numero_saques = 0
-    LIMITE_SAQUES = 3
+    def registrar(self, conta):
+        if self.valor > 0:
+            conta.saldo += self.valor
+            conta.historico.adicionar_transacao(f"Depósito de {self.valor} realizado.")
+            return True
+        return False
 
-    while True:
-        exibir_menu()
-        opcao = input("Escolha uma opção: ")
+class Saque(Transacao):
+    def __init__(self, valor):
+        self.valor = valor
 
-        if opcao == "1":
-            saldo, extrato = realizar_deposito(saldo, extrato)
-        elif opcao == "2":
-            saldo, extrato, numero_saques = realizar_saque(saldo, extrato, numero_saques, LIMITE_SAQUES, limite)
-        elif opcao == "3":
-            exibir_extrato(saldo, extrato)
-        elif opcao == "4":
-            print("Obrigado por usar o Banco Python. Até logo!")
-            break
+    def registrar(self, conta):
+        if 0 < self.valor <= conta.saldo:
+            conta.saldo -= self.valor
+            conta.historico.adicionar_transacao(f"Saque de {self.valor} realizado.")
+            return True
+        return False
+
+class Cliente:
+    def __init__(self, endereco):
+        self.endereco = endereco
+        self.contas = []
+
+    def adicionar_conta(self, conta):
+        self.contas.append(conta)
+
+    def realizar_transacao(self, conta, transacao):
+        if conta in self.contas:
+            sucesso = transacao.registrar(conta)
+            if sucesso:
+                print(f"Transação realizada: {transacao.__class__.__name__} de {transacao.valor}")
+            else:
+                print("Transação falhou.")
         else:
-            print("Opção inválida! Escolha uma opção válida.")
+            print("Conta não pertence ao cliente.")
 
-if __name__ == "__main__":
-    main()
+class PessoaFisica(Cliente):
+    def __init__(self, cpf, nome, data_nascimento, endereco):
+        super().__init__(endereco)
+        self.cpf = cpf
+        self.nome = nome
+        self.data_nascimento = data_nascimento
+
+class Conta:
+    def __init__(self, numero, agencia, cliente):
+        self.saldo = 0.0
+        self.numero = numero
+        self.agencia = agencia
+        self.cliente = cliente
+        self.historico = Historico()
+        cliente.adicionar_conta(self)
+
+    def sacar(self, valor):
+        saque = Saque(valor)
+        return saque.registrar(self)
+
+    def depositar(self, valor):
+        deposito = Deposito(valor)
+        return deposito.registrar(self)
+
+    @staticmethod
+    def nova_conta(cliente, numero, agencia):
+        return Conta(numero, agencia, cliente)
+
+class ContaCorrente(Conta):
+    def __init__(self, numero, agencia, cliente, limite):
+        super().__init__(numero, agencia, cliente)
+        self.limite = limite
+        self.limite_saques = 0
+
+    def sacar(self, valor):
+        if valor <= (self.saldo + self.limite):
+            self.limite_saques += 1
+            return super().sacar(valor)
+        return False
+
+cliente = PessoaFisica("123.456.789-00", "João Silva", date(1990, 5, 20), "Rua A, 123")
+conta = ContaCorrente(1, "0001", cliente, 500)
+
+cliente.realizar_transacao(conta, Deposito(200))
+cliente.realizar_transacao(conta, Saque(100))
